@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Agent Observability Dashboard</title>
+<style>
+:root{
+  --bg:#061522; --bg2:#081c2c; --panel:#0b2438; --panel2:#0e2e48;
+  --line:#1a5279; --line2:#2374a7; --text:#edf7ff; --muted:#8eb4cf;
+  --cyan:#34bdf8; --blue:#448cff; --teal:#24d2b3; --green:#35d18b;
+  --amber:#ffb240; --orange:#ff8345; --red:#ff5b66; --purple:#8e72ff;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:linear-gradient(180deg,#061522,#04101b);color:var(--text);
+  font-family:Inter,Segoe UI,Arial,sans-serif}
+button,select{font:inherit}
+.app{display:grid;grid-template-columns:215px 1fr;min-height:100vh}
+.sidebar{background:linear-gradient(180deg,#081a2a,#071421);border-right:1px solid #173d5a;padding:14px 10px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:8px 9px 18px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#5d7cff,#7d54ff 55%,#33c5ff);transform:skew(-8deg)}
+.brand b{font-size:17px}
+.nav{display:grid;gap:7px}
+.nav button{border:1px solid transparent;background:transparent;color:#bdd5e7;padding:11px 12px;border-radius:8px;text-align:left;cursor:pointer;display:flex;gap:10px;align-items:center}
+.nav button:hover{background:#0d2b44}
+.nav button.active{background:#0f4772;border-color:#1c6da2;color:white}
+.nav .badge{margin-left:auto;background:#e94454;padding:2px 6px;border-radius:6px;font-size:10px}
+.side-footer{position:absolute;bottom:16px;left:16px;right:16px;font-size:11px;color:#86a8c0}
+.online{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:7px;box-shadow:0 0 9px var(--green)}
+.main{padding:15px 18px 22px;min-width:0}
+.header{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;margin-bottom:13px}
+.context{min-width:0}
+.crumb{font-size:11px;color:#74a9cb;text-transform:uppercase;letter-spacing:.6px}
+.context h1{font-size:27px;margin:3px 0 4px;font-weight:760}
+.context p{margin:0;color:#9cc2dc;font-size:12px}
+.focus-strip{margin-top:8px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.focus{padding:5px 8px;background:#102a40;border:1px solid #21577f;border-radius:7px;font-size:10px;color:#c2d9e8}
+.focus.critical{border-color:#8b3341;color:#ff9ba2;background:#2b1922}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.ctrl,.range button{background:#0b263b;border:1px solid #1f5a81;color:#e6f4fd;border-radius:7px;padding:8px 10px;font-size:11px}
+.range{display:flex}
+.range button{border-radius:0;cursor:pointer}
+.range button:first-child{border-radius:7px 0 0 7px}.range button:last-child{border-radius:0 7px 7px 0}
+.range button.active{background:#126bb0;border-color:#2ca7ec}
+.live{color:#53e6aa}.pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:#43dda0;box-shadow:0 0 8px #43dda0;margin-right:6px;animation:pulse 1.3s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.page{display:none}.page.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
+.panel{background:linear-gradient(180deg,rgba(13,45,70,.97),rgba(8,31,50,.98));border:1px solid #1e567d;border-radius:9px;padding:12px;min-width:0}
+.panel h3{margin:0 0 9px;font-size:14px;display:flex;justify-content:space-between;gap:8px}
+.panel h3 small{font-size:10px;color:#78aaca;font-weight:500}
+.kpis{grid-column:span 12;display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.kpi{min-height:97px}
+.kpi .label{font-size:11px;color:#a8c8dd}.kpi .value{font-size:28px;font-weight:760;margin-top:8px}.kpi .delta{font-size:10px;margin-top:3px}
+.good{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}.info{color:var(--cyan)}
+.c8{grid-column:span 8}.c7{grid-column:span 7}.c6{grid-column:span 6}.c5{grid-column:span 5}.c4{grid-column:span 4}.c3{grid-column:span 3}.c2{grid-column:span 2}.c12{grid-column:span 12}
+canvas{width:100%;height:208px;display:block}
+table{width:100%;border-collapse:collapse;font-size:10.5px}
+th{color:#90b8d3;text-align:left;font-weight:500;padding:7px;border-bottom:1px solid #255b80}
+td{padding:7px;border-bottom:1px solid rgba(35,82,115,.48);vertical-align:middle}
+.pill,.tag{display:inline-block;padding:3px 6px;border-radius:5px;font-size:9px;border:1px solid #286388}
+.green{background:#0c493c;color:#7bf1c1;border-color:#1f735c}.yellow{background:#4d3816;color:#ffd17f;border-color:#84601c}
+.red{background:#4d1e27;color:#ff9ca3;border-color:#8c3947}.blue{background:#0d4d7b;color:#8ed8ff;border-color:#256d9b}.gray{background:#203547;color:#b7c9d6}
+.agent-table .who{font-weight:650}.agent-task{color:#b7d0e1}.agent-progress{height:7px;border:1px solid #1f567c;background:#071a2a;border-radius:6px;overflow:hidden}
+.agent-progress i{display:block;height:100%;background:linear-gradient(90deg,#2ec7ff,#29d2ad)}
+.stage{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin:16px 4px 10px}
+.stage div{padding:17px 4px;text-align:center;font-size:10px;background:linear-gradient(90deg,#218de6,#2c75ce);clip-path:polygon(0 0,88% 0,100% 50%,88% 100%,0 100%,12% 50%)}
+.stage div:nth-child(4){background:#6657d7}.stage div:nth-child(5){background:#219eb4}.stage div:nth-child(6){background:#2ca578}.stage div:nth-child(7){background:#36bb80}
+.stage-stats{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10px;color:#9bc1da}
+.stage-stats b{display:block;color:white;font-size:18px;margin-bottom:2px}
+.heatmap{display:grid;grid-template-columns:110px repeat(14,1fr);gap:3px;align-items:center}
+.heatmap .label{font-size:10px;color:#a7c4d8}.cell{height:22px;border-radius:2px}
+.h0{background:#12334d}.h1{background:#1d5a85}.h2{background:#6f405f}.h3{background:#b44555}.h4{background:#ff6d51}.h5{background:#ffc24b}
+.issue-row{padding:9px;border:1px solid #235a7f;border-left:3px solid var(--amber);background:#09253b;border-radius:7px;margin-bottom:7px}
+.issue-row.critical{border-left-color:var(--red)}.issue-row.low{border-left-color:var(--teal)}
+.issue-top{display:flex;justify-content:space-between;gap:8px}.issue-title{font-size:11px;font-weight:650}.sub{font-size:9.5px;color:#8db0c8;margin-top:3px}
+.dbcards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.dbcard{border:1px solid #1e5a80;background:#09243a;border-radius:7px;padding:9px}
+.dbhead{display:flex;justify-content:space-between;font-size:10px;font-weight:650}.dot-health{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;background:var(--green)}
+.dot-health.warn{background:var(--amber)}.dot-health.bad{background:var(--red)}
+.dbmini{display:grid;grid-template-columns:1fr auto;gap:4px 8px;margin-top:8px;font-size:9.5px;color:#90b5cd}
+.waitbars{display:grid;gap:6px}.waitrow{display:grid;grid-template-columns:120px 1fr 60px;gap:8px;align-items:center;font-size:9.5px}.waitbar{height:8px;background:#082037;border-radius:4px;overflow:hidden}.waitbar i{display:block;height:100%;background:#4d9dff}
+.donut{width:min(140px,100%);aspect-ratio:1/1;border-radius:50%;margin:auto;background:conic-gradient(var(--green) 0 69%,var(--blue) 69% 79%,var(--amber) 79% 84%,var(--red) 84%);position:relative}
+.donut:after{content:"";position:absolute;inset:24px;border-radius:50%;background:#09243a}.donut span{position:absolute;inset:0;display:grid;place-items:center;z-index:2;font-size:23px;font-weight:700}
+.legend{display:grid;gap:5px;font-size:9.5px;margin-top:8px}.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.approval-box{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{background:#09243a;border:1px solid #20587d;border-radius:7px;padding:9px}.metric b{font-size:20px}.metric small{display:block;color:#91b8d1;margin-top:3px}
+.sankey{position:relative;height:170px;margin-top:5px}.node{position:absolute;width:90px;border-left:8px solid var(--blue);padding:5px 6px;font-size:10px;background:#09243a}.node.r{right:0}.node.l{left:0}.flow{position:absolute;left:90px;right:90px;height:18px;background:linear-gradient(90deg,rgba(68,140,255,.65),rgba(36,210,179,.45));border-radius:20px;transform-origin:left center}
+.attn{display:grid;gap:7px}.attn div{padding:7px;border-left:3px solid var(--amber);background:#09243a;font-size:9.5px}.attn .critical{border-left-color:var(--red)}
+.event-stream{font-size:9.5px}.event{display:grid;grid-template-columns:45px 90px 1fr auto;gap:7px;padding:6px 0;border-bottom:1px solid rgba(33,78,110,.55)}.event .time{color:#75a6c6}
+.tabs-mini{display:flex;gap:5px}.tabs-mini button{font-size:9px;padding:4px 7px;border:1px solid #286184;background:#0a2a43;color:#bdd7e8;border-radius:5px}
+.tabs-mini button.active{background:#1167a5;color:white}
+@media(max-width:1200px){.app{grid-template-columns:1fr}.sidebar{display:none}.header{grid-template-columns:1fr}.toolbar{justify-content:flex-start}.kpis{grid-template-columns:repeat(3,1fr)}.c8,.c7,.c6,.c5,.c4{grid-column:span 12}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="sidebar">
+  <div class="brand"><div class="logo"></div><b>Agentic AIOps</b></div>
+  <div class="nav">
+    <button class="active" data-page="overview">⌂ <span>Overview</span></button>
+    <button data-page="incidents">⚠ <span>Incidents</span><span class="badge">3</span></button>
+    <button data-page="database">◉ <span>Database Health</span></button>
+    <button data-page="workflows">⌘ <span>Workflows</span></button>
+    <button data-page="compliance">▣ <span>Compliance</span></button>
+    <button data-page="reports">▤ <span>Reports</span></button>
+    <button data-page="knowledge">▰ <span>Knowledge Base</span></button>
+  </div>
+  <div class="side-footer"><span class="online"></span>Production<br/>v2.6.1</div>
+</aside>
+
+<main class="main">
+  <div class="header">
+    <div class="context">
+      <div class="crumb" id="crumb">MISSION CONTROL / OVERVIEW</div>
+      <h1 id="pageTitle">Agent Observability Dashboard</h1>
+      <p id="pageSubtitle">目前營運狀態、Agent 協作、告警事件、流程執行與治理視圖</p>
+      <div class="focus-strip"><span class="focus" id="periodIndicator">Viewing: Day</span>
+        <span class="focus critical">Critical Focus: INC-2026-0456 · Order API latency</span>
+        <span class="focus">SRE + DBA collaborating</span>
+        <span class="focus">DB Zone degraded</span>
+        <span class="focus">8 approvals waiting</span>
+      </div>
+    </div>
+    <div class="toolbar">
+      <select class="ctrl"><option>Production</option><option>UAT</option></select>
+      <div class="range"><button class="active" data-range="day">Day</button><button data-range="week">Week</button><button data-range="month">Month</button></div>
+      <span class="ctrl live"><span class="pulse"></span>LIVE</span>
+      <span class="ctrl" id="clock"></span>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section class="page active" id="page-overview">
+    <div class="grid">
+      <div class="kpis">
+        <div class="panel kpi"><div class="label">Active Agents</div><div class="value info" id="ovActiveAgents">4 / 4</div><div class="delta good">All healthy</div></div>
+        <div class="panel kpi"><div class="label">In-Progress Workflows</div><div class="value info" id="ovWorkflows">12</div><div class="delta bad">▲ 3 vs last hour</div></div>
+        <div class="panel kpi"><div class="label">Open Incidents</div><div class="value bad" id="ovIncidents">7</div><div class="delta good">▼ 4 vs last hour</div></div>
+        <div class="panel kpi"><div class="label">Autonomous Resolution Rate</div><div class="value good" id="wfAuto">78%</div><div class="delta good">▲ 6% vs last week</div></div>
+        <div class="panel kpi"><div class="label">Avg MTTR</div><div class="value info" id="rpMttr">28m</div><div class="delta good">▼ 42%</div></div>
+        <div class="panel kpi"><div class="label">Pending Approvals</div><div class="value warn" id="ovApprovals">4</div><div class="delta bad">▲ 2 vs last hour</div></div>
+      </div>
+
+      <div class="panel c6">
+        <h3>Agent Status / Agent 狀態 <small>目前正在處理什麼</small></h3>
+        <table class="agent-table"><thead><tr><th>Agent</th><th>Status</th><th>Current Task</th><th>Queue</th><th>Avg Runtime</th></tr></thead>
+        <tbody>
+        <tr><td class="who">Architect</td><td><span class="pill green">Running</span></td><td class="agent-task">Analyze service dependency for INC-1042</td><td>3</td><td>4.2m</td></tr>
+        <tr><td class="who">SRE</td><td><span class="pill green">Running</span></td><td class="agent-task">Investigate high latency in payment-api</td><td>4</td><td>6.8m</td></tr>
+        <tr><td class="who">DBA</td><td><span class="pill green">Running</span></td><td class="agent-task">Optimize slow query on order_db</td><td>2</td><td>5.1m</td></tr>
+        <tr><td class="who">Audit</td><td><span class="pill green">Running</span></td><td class="agent-task">Check SOP compliance for CHG-3321</td><td>3</td><td>3.7m</td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="panel c6">
+        <h3>Alert & Incident Trend / 告警事件趨勢 <small>Last 24 hours</small></h3>
+        <canvas id="overviewTrend"></canvas>
+      </div>
+
+      <div class="panel c7">
+        <h3>Workflow Timeline / 工作流程時間線 <small>In Progress (12)</small></h3>
+        <table><thead><tr><th>ID</th><th>Title</th><th>RCA</th><th>todo.md</th><th>workitem.md</th><th>Approval</th><th>Execution</th><th>Verification</th><th>worklog.md</th></tr></thead>
+        <tbody>
+          <tr><td>WF-8821</td><td>High DB CPU investigation</td><td>●</td><td>●</td><td>●</td><td>●</td><td class="info">◉</td><td>○</td><td>○</td></tr>
+          <tr><td>WF-8820</td><td>Payment API latency</td><td>●</td><td>●</td><td>●</td><td>●</td><td class="info">◉</td><td>○</td><td>○</td></tr>
+          <tr><td>WF-8817</td><td>Order DB failover check</td><td>●</td><td>●</td><td>●</td><td>●</td><td>●</td><td class="info">◉</td><td>○</td></tr>
+          <tr><td>WF-8815</td><td>Certificate renewal</td><td>●</td><td>●</td><td>○</td><td>○</td><td>○</td><td>○</td><td>○</td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="panel c5">
+        <h3>Database Health / 資料庫健康狀況 <small>All Databases</small></h3>
+        <div class="approval-box">
+          <div class="metric"><b>32%</b><small>CPU Utilization · ▼18%</small></div>
+          <div class="metric"><b>3</b><small>Blocking Sessions · ▲2</small></div>
+          <div class="metric"><b>12s</b><small>Replication Lag · ▼60%</small></div>
+          <div class="metric"><b>68%</b><small>Storage / Log Usage · ▲6%</small></div>
+        </div>
+      </div>
+
+      <div class="panel c7">
+        <h3>Pending Issues / 待處理議題 <small>View All →</small></h3>
+        <table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Owner</th><th>Zone</th><th>SLA</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>INC-1045</td><td>High latency on checkout API</td><td><span class="tag red">Critical</span></td><td>SRE</td><td>App</td><td>28m</td><td><span class="tag blue">Investigating</span></td></tr>
+          <tr><td>INC-1042</td><td>Database connection pool exhausted</td><td><span class="tag yellow">High</span></td><td>DBA</td><td>DB</td><td>52m</td><td><span class="tag blue">RCA in Progress</span></td></tr>
+          <tr><td>CHG-3321</td><td>Schema change for user_profile</td><td><span class="tag yellow">High</span></td><td>Architect</td><td>DB</td><td>1.5h</td><td><span class="tag yellow">Pending Approval</span></td></tr>
+          <tr><td>INC-1038</td><td>Elevated error rate on order worker</td><td><span class="tag yellow">Medium</span></td><td>SRE</td><td>Cloud</td><td>2.1h</td><td><span class="tag blue">Monitoring</span></td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="panel c5">
+        <h3>Risk & Compliance / 風險與合規 <small>USF + SOP</small></h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center">
+          <div class="donut"><span>92%</span></div>
+          <div class="legend">
+            <div><i style="background:var(--green)"></i>Compliant 138</div>
+            <div><i style="background:var(--red)"></i>Non-compliant 10</div>
+            <div><i style="background:#607b91"></i>Not Checked 2</div>
+            <div><i style="background:var(--amber)"></i>DB Zone Degraded</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INCIDENTS -->
+  <section class="page" id="page-incidents">
+    <div class="grid">
+      <div class="kpis">
+        <div class="panel kpi"><div class="label">Critical Alerts</div><div class="value bad" id="incCritical">18</div><div class="delta bad">▲ 50%</div></div>
+        <div class="panel kpi"><div class="label">Open Incidents</div><div class="value info" id="incOpen">7</div><div class="delta good">▼ 22%</div></div>
+        <div class="panel kpi"><div class="label">Autonomous Triage Rate</div><div class="value good" id="incAuto">78%</div><div class="delta good">▲ 6%</div></div>
+        <div class="panel kpi"><div class="label">Escalations</div><div class="value warn" id="incEsc">4</div><div class="delta good">▼ 33%</div></div>
+        <div class="panel kpi"><div class="label">Mean Time to Detect</div><div class="value info" id="incMttd">6.3m</div><div class="delta good">▼ 47%</div></div>
+        <div class="panel kpi"><div class="label">SLA Breach Risk</div><div class="value bad" id="incSla">12%</div><div class="delta bad">▲ 5%</div></div>
+      </div>
+      <div class="panel c7"><h3>Alert Trend / 告警趨勢 <small>Last 24 hours</small></h3><canvas id="incidentTrend"></canvas></div>
+      <div class="panel c5"><h3>Incident Heatmap / 事件熱區 <small>Zone × Time</small></h3><div class="heatmap" id="heatmap"></div></div>
+      <div class="panel c4"><h3>Alert Sources / 告警來源 <small>Count</small></h3><canvas id="sourceChart"></canvas></div>
+      <div class="panel c5"><h3>Anomaly Detection / 異常偵測 <small>Order Service</small></h3><canvas id="anomalyChart"></canvas></div>
+      <div class="panel c3"><h3>Autonomous vs Human-handled <small>Current</small></h3><div class="donut"><span>78%</span></div><div class="legend"><div><i style="background:var(--green)"></i>Autonomous</div><div><i style="background:var(--purple)"></i>Human handled</div></div><div class="sub" style="text-align:center;margin-top:8px">Current incident handling mix across alert triage and RCA workflows</div></div>
+      <div class="panel c7"><h3>Top Active Incidents / 主要事件 <small>View All →</small></h3><table><thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Owner</th><th>Zone</th><th>Duration</th><th>Status</th></tr></thead><tbody>
+        <tr><td>INC-1045</td><td>Order API high latency</td><td><span class="tag red">Critical</span></td><td>SRE</td><td>US East</td><td>2h14m</td><td><span class="tag blue">Investigating</span></td></tr>
+        <tr><td>INC-1042</td><td>DB connection pool exhausted</td><td><span class="tag yellow">High</span></td><td>DBA</td><td>US East</td><td>1h32m</td><td><span class="tag blue">RCA</span></td></tr>
+        <tr><td>INC-1038</td><td>Authentication failure spike</td><td><span class="tag yellow">High</span></td><td>SRE</td><td>Europe</td><td>58m</td><td><span class="tag blue">Monitoring</span></td></tr>
+      </tbody></table></div>
+      <div class="panel c5"><h3>Recent Correlated Events / 關聯事件 <small>INC-1045</small></h3><div class="event-stream">
+        <div class="event"><span class="time">10:24</span><b>ALR-8841</b><span>API response time &gt; 2s</span><span>Azure Monitor</span></div>
+        <div class="event"><span class="time">10:25</span><b>ALR-8842</b><span>CPU utilization &gt; 85%</span><span>Monitoring MCP</span></div>
+        <div class="event"><span class="time">10:26</span><b>ALR-8843</b><span>5xx errors increased</span><span>App Insights</span></div>
+        <div class="event"><span class="time">10:28</span><b>ALR-8844</b><span>DB query latency high</span><span>Log Analytics</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- DATABASE -->
+  <section class="page" id="page-database">
+    <div class="grid">
+      <div class="kpis">
+        <div class="panel kpi"><div class="label">SQL Instances Healthy</div><div class="value good" id="dbHealthy">8 / 10</div><div class="delta good">▲ 1</div></div>
+        <div class="panel kpi"><div class="label">Database CPU</div><div class="value info" id="dbCpu">32%</div><div class="delta good">▼12%</div></div>
+        <div class="panel kpi"><div class="label">Blocking Sessions</div><div class="value bad" id="dbBlocking">3</div><div class="delta bad">▲2</div></div>
+        <div class="panel kpi"><div class="label">Query Regression Alerts</div><div class="value bad" id="dbRegress">6</div><div class="delta bad">▲2</div></div>
+        <div class="panel kpi"><div class="label">Replication Lag</div><div class="value info" id="dbLag">12s</div><div class="delta good">▼60%</div></div>
+        <div class="panel kpi"><div class="label">Storage / Log Usage</div><div class="value warn" id="dbStorage">68%</div><div class="delta bad">▲6%</div></div>
+      </div>
+      <div class="panel c6"><h3>Database Health Overview / 資料庫健康總覽 <small>View All Instances →</small></h3><div class="dbcards" id="dbCards"></div></div>
+      <div class="panel c6"><h3>CPU / IOPS / Query Latency <small>Last 24 hours</small></h3><canvas id="dbTrend"></canvas></div>
+      <div class="panel c4"><h3>Wait Stats / 等待統計 <small>Top 8</small></h3><div class="waitbars" id="waitBars"></div></div>
+      <div class="panel c4"><h3>Blocking & Deadlock / 鎖定阻塞 <small>Current</small></h3><div class="approval-box">
+        <div class="metric"><b class="bad">3</b><small>Blocking Sessions ▲2</small></div><div class="metric"><b class="bad">12</b><small>Blocked Sessions ▲6</small></div>
+        <div class="metric"><b class="warn">1</b><small>Deadlocks ▼50%</small></div><div class="metric"><b class="good">0</b><small>Long-running Tx</small></div>
+      </div></div>
+      <div class="panel c4"><h3>Replication / AG Health <small>Current</small></h3><table><thead><tr><th>Instance</th><th>Role</th><th>State</th><th>Lag</th></tr></thead><tbody>
+        <tr><td>AG-PRD-01</td><td>Primary</td><td><span class="tag green">Synced</span></td><td>0s</td></tr>
+        <tr><td>AG-PRD-02</td><td>Secondary</td><td><span class="tag green">Synced</span></td><td>12s</td></tr>
+        <tr><td>AG-DR-01</td><td>Secondary</td><td><span class="tag yellow">Syncing</span></td><td>42s</td></tr>
+      </tbody></table></div>
+      <div class="panel c8"><h3>Top Regressed Queries / 主要退化查詢 <small>View All →</small></h3><table><thead><tr><th>Query ID</th><th>Database</th><th>CPU</th><th>Duration</th><th>Plan Hash</th><th>Regression</th><th>Recommendation</th></tr></thead><tbody>
+        <tr><td>Q-37291</td><td>SalesDB</td><td>312s</td><td>45s</td><td>0x7A3F9C2B</td><td class="bad">↑420%</td><td><span class="tag blue">Check execution plan</span></td></tr>
+        <tr><td>Q-11455</td><td>HRDB</td><td>198s</td><td>32s</td><td>0x1DBE44A1</td><td class="bad">↑310%</td><td><span class="tag blue">Update statistics</span></td></tr>
+        <tr><td>Q-88302</td><td>FinanceDB</td><td>176s</td><td>28s</td><td>0x98C781D0</td><td class="bad">↑265%</td><td><span class="tag blue">Review indexes</span></td></tr>
+      </tbody></table></div>
+      <div class="panel c4"><h3>Open DBA Workflows / 待處理 DBA 流程 <small>5 items</small></h3><table><tbody>
+        <tr><td>DBW-1092</td><td>High CPU query</td><td><span class="tag red">Critical</span></td></tr>
+        <tr><td>DBW-1087</td><td>Blocking chain</td><td><span class="tag yellow">Pending</span></td></tr>
+        <tr><td>DBW-1081</td><td>Missing index</td><td><span class="tag blue">In Progress</span></td></tr>
+      </tbody></table></div>
+    </div>
+  </section>
+
+  <!-- WORKFLOWS -->
+  <section class="page" id="page-workflows">
+    <div class="grid">
+      <div class="kpis">
+        <div class="panel kpi"><div class="label">Active Workflows</div><div class="value info" id="wfActive">47</div><div class="delta good">▲12%</div></div>
+        <div class="panel kpi"><div class="label">Pending Approvals</div><div class="value warn" id="wfApprovals">14</div><div class="delta bad">▲3</div></div>
+        <div class="panel kpi"><div class="label">Overdue Items</div><div class="value bad" id="wfOverdue">6</div><div class="delta good">▼2</div></div>
+        <div class="panel kpi"><div class="label">Cumulative Agent Runtime</div><div class="value info" id="wfRuntime">162h</div><div class="delta good">▲18%</div></div>
+        <div class="panel kpi"><div class="label">Workflow Elapsed Time</div><div class="value info" id="wfElapsed">42m</div><div class="delta good">▼28%</div></div>
+        <div class="panel kpi"><div class="label">Autonomous Resolution Rate</div><div class="value good" id="wfAuto">78%</div><div class="delta good">▲6%</div></div>
+      </div>
+      <div class="panel c6"><h3>Workflow Queue / 工作佇列 <small>View All (47) →</small></h3><table><thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Owner</th><th>Risk</th><th>State</th><th>Status</th></tr></thead><tbody>
+        <tr><td>WF-8821</td><td>High DB CPU investigation</td><td>INC</td><td>SRE</td><td><span class="tag red">High</span></td><td>Execution</td><td><span class="tag green">Running</span></td></tr>
+        <tr><td>WF-8819</td><td>Payment API latency fix</td><td>INC</td><td>Architect</td><td><span class="tag yellow">Medium</span></td><td>Approval</td><td><span class="tag blue">Waiting</span></td></tr>
+        <tr><td>WF-8814</td><td>Order DB failover check</td><td>CHG</td><td>DBA</td><td><span class="tag red">High</span></td><td>Verification</td><td><span class="tag green">Running</span></td></tr>
+        <tr><td>WF-8807</td><td>Optimize slow query</td><td>CHG</td><td>DBA</td><td><span class="tag red">High</span></td><td>RCA</td><td><span class="tag green">Running</span></td></tr>
+      </tbody></table></div>
+      <div class="panel c6"><h3>Stage Distribution / 階段分布 <small>All Workflows</small></h3><div class="stage"><div>RCA</div><div>todo.md</div><div>workitem.md</div><div>Approval</div><div>Execution</div><div>Verification</div><div>worklog.md</div></div>
+        <div class="stage-stats"><div><b>52</b>23%</div><div><b>38</b>17%</div><div><b>29</b>13%</div><div><b>21</b>9%</div><div><b>35</b>16%</div><div><b>28</b>12%</div><div><b>22</b>10%</div></div></div>
+      <div class="panel c5"><h3>Approval Queue / 核准佇列 <small>View All (14)</small></h3><table><thead><tr><th>Change</th><th>Title</th><th>Requester</th><th>Wait</th><th>Risk</th></tr></thead><tbody>
+        <tr><td>CHG-3321</td><td>DB parameter update</td><td>DBA</td><td>2.8h</td><td><span class="tag red">High</span></td></tr>
+        <tr><td>CHG-3318</td><td>Upgrade Redis</td><td>Architect</td><td>1.6h</td><td><span class="tag red">High</span></td></tr>
+        <tr><td>CHG-3314</td><td>Network ACL change</td><td>SRE</td><td>3.1h</td><td><span class="tag yellow">Medium</span></td></tr>
+      </tbody></table></div>
+      <div class="panel c4"><h3>Agent Handoff Matrix / Agent 交接 <small>Last 7 days</small></h3><div class="sankey">
+        <div class="node l" style="top:8px;border-color:#4d8dff">Architect 42</div><div class="node l" style="top:52px;border-color:#2bd0ac">SRE 36</div><div class="node l" style="top:96px;border-color:#ffc14e">DBA 28</div><div class="node l" style="top:140px;border-color:#926fff">Audit 18</div>
+        <div class="node r" style="top:8px;border-color:#4d8dff">Architect 38</div><div class="node r" style="top:52px;border-color:#2bd0ac">SRE 34</div><div class="node r" style="top:96px;border-color:#ffc14e">DBA 32</div><div class="node r" style="top:140px;border-color:#926fff">Audit 20</div>
+        <div class="flow" style="top:24px;transform:rotate(6deg);opacity:.6"></div><div class="flow" style="top:66px;transform:rotate(-4deg);opacity:.55"></div><div class="flow" style="top:106px;transform:rotate(2deg);opacity:.45"></div>
+      </div></div>
+      <div class="panel c3"><h3>SOP Compliance / SOP 合規率 <small>All Categories</small></h3><div class="donut"><span>92%</span></div><div class="legend"><div><i style="background:var(--green)"></i>Change 95%</div><div><i style="background:var(--green)"></i>Incident 88%</div><div><i style="background:var(--green)"></i>Maintenance 94%</div></div></div>
+      <div class="panel c4"><h3>Backlog Trend / 待辦趨勢 <small>Day / Week / Month</small></h3><canvas id="backlogChart"></canvas></div>
+      <div class="panel c4"><h3>High-Risk Changes / 高風險變更 <small>View All</small></h3><table><tbody><tr><td>CHG-3321</td><td>DB parameter</td><td><span class="tag red">High</span></td><td>Pending</td></tr><tr><td>CHG-3318</td><td>Upgrade Redis</td><td><span class="tag red">High</span></td><td>Pending</td></tr><tr><td>CHG-3307</td><td>DR failover</td><td><span class="tag red">High</span></td><td>In Progress</td></tr></tbody></table></div>
+      <div class="panel c2"><h3>Execution Outcomes <small>7 days</small></h3><div class="donut"><span>124</span></div></div>
+      <div class="panel c2"><h3>Attention Needed <small>View All</small></h3><div class="attn"><div class="critical">SLA at risk: 3 workflows</div><div>High-risk change pending</div><div>Agent handoff delayed</div><div>Repeated failure detected</div></div></div>
+    </div>
+  </section>
+
+  <!-- COMPLIANCE -->
+  <section class="page" id="page-compliance">
+    <div class="grid">
+      <div class="panel c6"><h3>Policy & USF Compliance <small>Current posture</small></h3><div class="approval-box">
+        <div class="metric"><b class="good" id="cpPolicy">92%</b><small>Policy compliant</small></div><div class="metric"><b class="bad" id="cpBlocked">4</b><small>Blocked actions</small></div>
+        <div class="metric"><b class="warn" id="cpExceptions">7</b><small>Approval exceptions</small></div><div class="metric"><b class="good" id="cpUnsigned">0</b><small>Unsigned tasks executed</small></div>
+      </div></div>
+      <div class="panel c6"><h3>Audit Trail Snapshot <small>Who / What / When</small></h3><table><thead><tr><th>Change</th><th>Requester</th><th>Approver</th><th>Executor</th><th>Evidence</th></tr></thead><tbody><tr><td>CHG-3321</td><td>DBA Agent</td><td>Ops Lead</td><td>DB Zone Worker</td><td><span class="tag green">Complete</span></td></tr><tr><td>CHG-3318</td><td>Architect</td><td>Platform Lead</td><td>App Zone Worker</td><td><span class="tag green">Complete</span></td></tr></tbody></table></div>
+      <div class="panel c12"><h3>Security Decision Log <small>Latest decisions</small></h3><table><thead><tr><th>Time</th><th>Agent</th><th>Skill</th><th>Risk</th><th>Decision</th><th>Reason</th></tr></thead><tbody><tr><td>20:18:42</td><td>DBA</td><td>sql.execute_workitem</td><td>L2</td><td><span class="tag green">Allow</span></td><td>Approval + hash valid</td></tr><tr><td>20:12:04</td><td>SRE</td><td>server.runbook</td><td>L2</td><td><span class="tag red">Block</span></td><td>Execution window expired</td></tr><tr><td>20:05:19</td><td>Audit</td><td>evidence.read</td><td>L0</td><td><span class="tag green">Allow</span></td><td>Read-only skill</td></tr></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-reports">
+  <div class="grid">
+    <div class="kpis">
+      <div class="panel kpi"><div class="label">Closed Incidents</div><div class="value good" id="rpClosed">126</div><div class="delta good">▲ 18% vs last month</div></div>
+      <div class="panel kpi"><div class="label">Avg MTTR</div><div class="value info" id="rpMttr">28m</div><div class="delta good">▼ 42%</div></div>
+      <div class="panel kpi"><div class="label">Autonomous Resolution</div><div class="value good" id="rpAuto">78%</div><div class="delta good">▲ 6%</div></div>
+      <div class="panel kpi"><div class="label">SOP Compliance</div><div class="value good" id="rpSop">96%</div><div class="delta good">▲ 2%</div></div>
+      <div class="panel kpi"><div class="label">Approval SLA</div><div class="value warn" id="rpApproval">11m</div><div class="delta good">▼ 21%</div></div>
+      <div class="panel kpi"><div class="label">Execution Success</div><div class="value good" id="rpSuccess">93%</div><div class="delta good">▲ 4%</div></div>
+    </div>
+
+    <div class="panel c7">
+      <h3>Operational Trend / 營運趨勢 <small>Day / Week / Month</small></h3>
+      <canvas id="reportTrend"></canvas>
+    </div>
+
+    <div class="panel c5">
+      <h3>Executive Summary / 管理摘要 <small>Current period</small></h3>
+      <div class="approval-box">
+        <div class="metric"><b class="good">78%</b><small>Autonomous handling</small></div>
+        <div class="metric"><b class="info">42m</b><small>Workflow elapsed time</small></div>
+        <div class="metric"><b class="warn">14</b><small>Pending approvals</small></div>
+        <div class="metric"><b class="bad">4</b><small>Policy blocks</small></div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:#97bdd5;line-height:1.7">
+        • SRE ↔ DBA remains the most frequent handoff path<br/>
+        • Database-related incidents account for 41% of high-priority work<br/>
+        • Approval wait is still the largest non-agent delay<br/>
+        • No unsigned execution task has been accepted by Zone Workers
+      </div>
+    </div>
+
+    <div class="panel c6">
+      <h3>Agent Performance / Agent 效能 <small>Current period</small></h3>
+      <table>
+        <thead><tr><th>Agent</th><th>Tasks</th><th>Success</th><th>Avg Runtime</th><th>Handoffs</th><th>Escalations</th></tr></thead>
+        <tbody>
+          <tr><td>Architect</td><td>38</td><td class="good">97%</td><td>4.2m</td><td>14</td><td>2</td></tr>
+          <tr><td>SRE</td><td>72</td><td class="good">94%</td><td>6.8m</td><td>31</td><td>5</td></tr>
+          <tr><td>DBA</td><td>61</td><td class="good">92%</td><td>5.1m</td><td>28</td><td>4</td></tr>
+          <tr><td>Audit</td><td>49</td><td class="good">99%</td><td>3.7m</td><td>11</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel c6">
+      <h3>Compliance & Risk Report / 合規與風險 <small>USF / Policy</small></h3>
+      <table>
+        <thead><tr><th>Metric</th><th>Value</th><th>Trend</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>SOP Compliance</td><td>96%</td><td class="good">▲ 2%</td><td><span class="tag green">Healthy</span></td></tr>
+          <tr><td>L2 Changes with Approval</td><td>100%</td><td class="good">Stable</td><td><span class="tag green">Compliant</span></td></tr>
+          <tr><td>Blocked L3 Actions</td><td>4</td><td class="warn">▲ 1</td><td><span class="tag yellow">Review</span></td></tr>
+          <tr><td>Unsigned Tasks Executed</td><td>0</td><td class="good">Stable</td><td><span class="tag green">Expected</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel c12">
+      <h3>Recent Reports / 最近報表 <small>Export-ready</small></h3>
+      <table>
+        <thead><tr><th>Report</th><th>Period</th><th>Owner</th><th>Generated</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Executive AIOps Monthly Summary</td><td>Oct 2026</td><td>Platform Ops</td><td>20:10</td><td><span class="tag green">Ready</span></td></tr>
+          <tr><td>Incident & MTTR Weekly Report</td><td>Week 41</td><td>SRE</td><td>19:45</td><td><span class="tag green">Ready</span></td></tr>
+          <tr><td>DB Performance & RCA Digest</td><td>Last 7 days</td><td>DBA</td><td>18:32</td><td><span class="tag green">Ready</span></td></tr>
+          <tr><td>USF / SOP Compliance Report</td><td>Oct 2026</td><td>Audit</td><td>17:50</td><td><span class="tag blue">Updated</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+  <section class="page" id="page-knowledge">
+  <div class="grid">
+    <div class="kpis">
+      <div class="panel kpi"><div class="label">OKF Knowledge Bundles</div><div class="value info" id="kbBundles">42</div><div class="delta good">▲ 3 this month</div></div>
+      <div class="panel kpi"><div class="label">Approved Runbooks</div><div class="value good" id="kbRunbooks">31</div><div class="delta good">96% reviewed</div></div>
+      <div class="panel kpi"><div class="label">Historical RCA Cases</div><div class="value info" id="kbRca">186</div><div class="delta good">▲ 14 this month</div></div>
+      <div class="panel kpi"><div class="label">Knowledge Freshness</div><div class="value good" id="kbFresh">91%</div><div class="delta good">Within review SLA</div></div>
+      <div class="panel kpi"><div class="label">Pending Reviews</div><div class="value warn" id="kbReviews">7</div><div class="delta warn">2 overdue</div></div>
+      <div class="panel kpi"><div class="label">Linked Resources</div><div class="value info" id="kbResources">128</div><div class="delta good">Topology mapped</div></div>
+    </div>
+
+    <div class="panel c7">
+      <h3>Knowledge Coverage / 知識覆蓋 <small>OKF domains</small></h3>
+      <canvas id="knowledgeChart"></canvas>
+    </div>
+
+    <div class="panel c5">
+      <h3>Knowledge Health / 知識健康度 <small>Current</small></h3>
+      <div class="approval-box">
+        <div class="metric"><b class="good">91%</b><small>Freshness</small></div>
+        <div class="metric"><b class="good">94%</b><small>Runbook coverage</small></div>
+        <div class="metric"><b class="info">88%</b><small>Resource mapping</small></div>
+        <div class="metric"><b class="warn">7</b><small>Pending reviews</small></div>
+      </div>
+      <div style="margin-top:10px;font-size:10px;color:#97bdd5;line-height:1.7">
+        Knowledge updates are review-gated before becoming trusted Agent context.
+        Unverified Agent hypotheses remain evidence, not authoritative knowledge.
+      </div>
+    </div>
+
+    <div class="panel c6">
+      <h3>OKF Knowledge Bundles / 知識包 <small>Latest revisions</small></h3>
+      <table>
+        <thead><tr><th>Bundle</th><th>Scope</th><th>Revision</th><th>Owner</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>KB-SQL-PROD</td><td>DB Zone</td><td>r42</td><td>DBA</td><td><span class="tag green">Trusted</span></td></tr>
+          <tr><td>KB-APP-CHECKOUT</td><td>App Zone</td><td>r18</td><td>SRE</td><td><span class="tag green">Trusted</span></td></tr>
+          <tr><td>KB-NET-EDGE</td><td>Network</td><td>r11</td><td>Architect</td><td><span class="tag blue">Reviewed</span></td></tr>
+          <tr><td>KB-SEC-POLICY</td><td>Governance</td><td>r27</td><td>Audit</td><td><span class="tag yellow">Review due</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel c6">
+      <h3>Runbooks & SOP / 執行手冊與 SOP <small>Most used</small></h3>
+      <table>
+        <thead><tr><th>Runbook</th><th>Version</th><th>Risk</th><th>Last Used</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>SQL Blocking RCA</td><td>1.7</td><td>L1</td><td>20:18</td><td><span class="tag green">Approved</span></td></tr>
+          <tr><td>Index Change Execution</td><td>1.3</td><td>L2</td><td>19:42</td><td><span class="tag green">Approved</span></td></tr>
+          <tr><td>API Latency Investigation</td><td>2.1</td><td>L1</td><td>19:15</td><td><span class="tag green">Approved</span></td></tr>
+          <tr><td>DB Failover Verification</td><td>1.2</td><td>L2</td><td>18:02</td><td><span class="tag blue">Reviewed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel c7">
+      <h3>Historical RCA / 歷史 RCA 知識 <small>Reusable patterns</small></h3>
+      <table>
+        <thead><tr><th>Case</th><th>Pattern</th><th>Evidence</th><th>Outcome</th></tr></thead>
+        <tbody>
+          <tr><td>RCA-0186</td><td>Query plan regression</td><td>Query Store + Wait Stats</td><td>Index + query rewrite</td></tr>
+          <tr><td>RCA-0179</td><td>Connection pool exhaustion</td><td>App metrics + DB sessions</td><td>Pool tuning + retry policy</td></tr>
+          <tr><td>RCA-0172</td><td>Blocking cascade</td><td>DMV + transaction log</td><td>Runbook + workload change</td></tr>
+          <tr><td>RCA-0164</td><td>Storage latency</td><td>IOPS + latency correlation</td><td>Storage tier adjustment</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel c5">
+      <h3>Pending Knowledge Reviews / 待審知識 <small>Governed updates</small></h3>
+      <div class="attn">
+        <div class="critical">KB-SEC-POLICY r28 · review overdue by 2 days</div>
+        <div>RCA-0187 · DBA evidence validation pending</div>
+        <div>Runbook: Network ACL update · Awaiting Audit review</div>
+        <div>KB-APP-CHECKOUT · service dependency change detected</div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const titles={
+ overview:["MISSION CONTROL / OVERVIEW","Agent Observability Dashboard","目前營運狀態、Agent 協作、告警事件、流程執行與治理視圖"],
+ incidents:["OPERATIONS / INCIDENTS","Alert & Incident Command Center","告警趨勢、事件熱區、異常偵測、關聯事件與自動分流"],
+ database:["OPERATIONS / DATABASE","Database Health Command Center","資料庫健康、Blocking、Query Regression、AG / Replication 與 DBA 工作"],
+ workflows:["OPERATIONS / WORKFLOWS","Workflow & Action Queue","todo.md → workitem.md → Approval → Execution → Verification → worklog.md"],
+ compliance:["GOVERNANCE / COMPLIANCE","Security & Compliance","USF Risk、Policy Decision、Approval、Execution Identity 與 Audit Trail"],
+ reports:["ANALYTICS / REPORTS","Reports & Analytics","營運報表、SLA / MTTR、Agent 效率與合規趨勢"],
+ knowledge:["KNOWLEDGE / OKF","Knowledge Base","Open Knowledge Format、SOP、Runbooks、歷史 RCA 與版本管理"]
+};
+$$(".nav button").forEach(b=>b.onclick=()=>{
+ $$(".nav button").forEach(x=>x.classList.remove("active"));
+ b.classList.add("active");
+ $$(".page").forEach(p=>p.classList.remove("active"));
+ $("#page-"+b.dataset.page).classList.add("active");
+ const t=titles[b.dataset.page];
+ $("#crumb").textContent=t[0];
+ $("#pageTitle").textContent=t[1];
+ $("#pageSubtitle").textContent=t[2];
+ requestAnimationFrame(()=>requestAnimationFrame(redrawAll));
+ setTimeout(redrawAll,120);
+});
+function clock(){ $("#clock").textContent=new Date().toLocaleString("zh-TW",{hour12:false}); } clock(); setInterval(clock,1000);
+let currentRange="day";
+$$("[data-range]").forEach(b=>b.onclick=()=>{$$("[data-range]").forEach(x=>x.classList.remove("active"));b.classList.add("active");currentRange=b.dataset.range;updateRangeData();redrawAll();});
+
+
+const RANGE_DATA={
+ day:{
+  overview:["4 / 4","12","7","78%","28m","4"],
+  incidents:["18","7","78%","4","6.3m","12%"],
+  database:["8 / 10","32%","3","6","12s","68%"],
+  workflows:["47","14","6","162h","42m","78%"],
+  compliance:["92%","4","7","0"],
+  reports:["126","28m","78%","96%","11m","93%"],
+  knowledge:["42","31","186","91%","7","128"]
+ },
+ week:{
+  overview:["4 / 4","68","31","74%","34m","19"],
+  incidents:["112","31","74%","16","7.8m","15%"],
+  database:["8 / 10","39%","11","23","18s","71%"],
+  workflows:["214","53","21","934h","49m","74%"],
+  compliance:["90%","17","22","0"],
+  reports:["684","34m","74%","94%","14m","91%"],
+  knowledge:["46","33","201","89%","11","136"]
+ },
+ month:{
+  overview:["4 / 4","286","92","71%","47m","61"],
+  incidents:["428","92","71%","48","9.1m","18%"],
+  database:["8 / 10","44%","37","81","26s","74%"],
+  workflows:["892","184","74","3,842h","57m","71%"],
+  compliance:["88%","61","79","0"],
+  reports:["2,412","47m","71%","92%","18m","88%"],
+  knowledge:["52","37","246","86%","18","148"]
+ }
+};
+
+function setText(id,val){const e=$("#"+id);if(e)e.textContent=val;}
+function updateRangeData(){
+ const d=RANGE_DATA[currentRange];
+ const map=[
+  ["ovActiveAgents","ovWorkflows","ovIncidents","ovAuto","ovMttr","ovApprovals"],
+  ["incCritical","incOpen","incAuto","incEsc","incMttd","incSla"],
+  ["dbHealthy","dbCpu","dbBlocking","dbRegress","dbLag","dbStorage"],
+  ["wfActive","wfApprovals","wfOverdue","wfRuntime","wfElapsed","wfAuto"],
+  ["cpPolicy","cpBlocked","cpExceptions","cpUnsigned"],
+  ["rpClosed","rpMttr","rpAuto","rpSop","rpApproval","rpSuccess"],
+  ["kbBundles","kbRunbooks","kbRca","kbFresh","kbReviews","kbResources"]
+ ];
+ ["overview","incidents","database","workflows","compliance","reports","knowledge"].forEach((k,idx)=>{
+  map[idx].forEach((id,i)=>setText(id,d[k][i]));
+ });
+ const pi=$("#periodIndicator"); if(pi) pi.textContent="Viewing: "+({day:"Day",week:"Week",month:"Month"}[currentRange]);
+}
+
+function lineChart(el, series, labels){
+ if(!el||el.clientWidth===0)return;
+ const dpr=devicePixelRatio||1,w=el.clientWidth,h=el.clientHeight,ctx=el.getContext("2d");
+ el.width=w*dpr;el.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ ctx.strokeStyle="#174665";ctx.lineWidth=1;
+ for(let i=1;i<5;i++){const y=(h-25)*i/5;ctx.beginPath();ctx.moveTo(35,y);ctx.lineTo(w-8,y);ctx.stroke();}
+ let max=Math.max(...series.flatMap(s=>s.data))*1.18;
+ series.forEach(s=>{ctx.strokeStyle=s.c;ctx.lineWidth=2;ctx.beginPath();s.data.forEach((v,i)=>{const x=35+(w-48)*i/(s.data.length-1),y=h-22-(h-38)*v/max;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();});
+ ctx.fillStyle="#7599b3";ctx.font="9px Segoe UI";labels.forEach((l,i)=>{if(i%Math.ceil(labels.length/7)===0)ctx.fillText(l,35+(w-48)*i/(labels.length-1)-6,h-5)});
+}
+function barChart(el, values, labels){
+ if(!el||el.clientWidth===0)return;
+ const dpr=devicePixelRatio||1,w=el.clientWidth,h=el.clientHeight,ctx=el.getContext("2d");
+ el.width=w*dpr;el.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+ const max=Math.max(...values)*1.15,bw=(w-50)/values.length*.6;
+ values.forEach((v,i)=>{const x=35+(w-45)*i/values.length+(w-45)/values.length*.2,y=h-25-(h-45)*v/max;ctx.fillStyle=["#428cff","#8c69ef","#46c6c5","#3a8fe8","#ff9048","#798da1"][i%6];ctx.fillRect(x,y,bw,h-25-y);ctx.fillStyle="#b8d1e2";ctx.font="9px Segoe UI";ctx.fillText(labels[i],x-3,h-8);ctx.fillStyle="#fff";ctx.fillText(v,x+bw/2-5,y-5)});
+}
+function redrawAll(){
+ const chartSets={
+  day:{
+   labels:["16","18","20","22","00","02","04","06","08","10","12","14"],
+   overview:[[12,15,17,14,10,13,18,22,24,33,39,30],[5,7,9,7,4,8,10,13,15,18,27,17],[7,8,10,9,6,8,12,14,16,20,22,15]],
+   incident:[[23,29,34,36,33,28,34,39,44,52,61,45],[8,10,12,11,9,8,14,15,17,21,28,20],[14,17,20,18,15,17,22,25,28,32,45,35]],
+   anomaly:[[400,430,410,450,470,490,520,580,650,1850,720,520],[70,80,90,100,110,140,180,250,400,1600,430,180]],
+   db:[[28,32,34,38,35,42,49,53,55,68,79,58],[18,20,22,24,18,26,29,32,35,39,52,42],[8,9,10,8,7,10,12,15,18,21,33,20]],
+   backlogLabels:["08","10","12","14","16","18","20","22"],
+   backlog:[[18,22,24,28,34,32,41,36],[8,9,10,13,16,15,20,18],[2,3,4,4,5,6,7,6]],
+   reportLabels:["00","04","08","12","16","20","24"],
+   report:[[44,42,39,36,33,30,28],[68,71,73,75,77,78,78],[16,15,14,13,12,11,11]],
+   knowledge:[94,88,91,83,79,96],
+   sources:[180,124,96,78,52,36]
+  },
+  week:{
+   labels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+   overview:[[58,66,72,81,74,59,52],[21,28,32,38,35,24,20],[31,34,39,44,40,29,25]],
+   incident:[[88,102,115,126,118,91,84],[29,33,38,44,41,31,28],[48,56,61,69,65,51,46]],
+   anomaly:[[520,610,580,730,690,640,590],[160,190,170,290,240,200,180]],
+   db:[[36,41,48,44,52,39,37],[24,27,32,28,35,25,23],[12,15,18,16,22,14,12]],
+   backlogLabels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+   backlog:[[122,139,148,166,174,159,151],[51,56,61,67,72,63,59],[18,20,22,25,28,24,21]],
+   reportLabels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+   report:[[41,39,37,36,35,34,34],[70,71,72,73,74,74,74],[16,16,15,15,14,14,14]],
+   knowledge:[92,86,89,81,77,94],
+   sources:[940,682,521,438,286,174]
+  },
+  month:{
+   labels:["W1","W2","W3","W4"],
+   overview:[[214,238,256,286],[72,81,88,92],[118,127,139,146]],
+   incident:[[326,371,403,428],[66,75,84,92],[182,201,219,241]],
+   anomaly:[[690,810,760,930],[230,280,260,360]],
+   db:[[41,46,43,44],[29,33,31,37],[18,22,21,26]],
+   backlogLabels:["W1","W2","W3","W4"],
+   backlog:[[558,612,701,742],[211,239,267,284],[68,79,91,104]],
+   reportLabels:["W1","W2","W3","W4"],
+   report:[[56,52,49,47],[68,69,70,71],[21,20,19,18]],
+   knowledge:[88,82,86,78,72,91],
+   sources:[3620,2480,1900,1610,1040,720]
+  }
+ };
+ const d=chartSets[currentRange];
+ lineChart($("#overviewTrend"),[
+  {data:d.overview[0],c:"#49a4ff"},{data:d.overview[1],c:"#ff9148"},{data:d.overview[2],c:"#ffce55"}
+ ],d.labels);
+ lineChart($("#incidentTrend"),[
+  {data:d.incident[0],c:"#3e98f4"},{data:d.incident[1],c:"#ff9148"},{data:d.incident[2],c:"#ffd04b"}
+ ],d.labels);
+ lineChart($("#anomalyChart"),[
+  {data:d.anomaly[0],c:"#3b8df4"},{data:d.anomaly[1],c:"#ff5d65"}
+ ],d.labels);
+ lineChart($("#dbTrend"),[
+  {data:d.db[0],c:"#4aa0ff"},{data:d.db[1],c:"#ff8448"},{data:d.db[2],c:"#ffd04c"}
+ ],d.labels);
+ lineChart($("#backlogChart"),[
+  {data:d.backlog[0],c:"#438eff"},{data:d.backlog[1],c:"#ff9b45"},{data:d.backlog[2],c:"#ff5d65"}
+ ],d.backlogLabels);
+ lineChart($("#reportTrend"),[
+  {data:d.report[0],c:"#34bdf8"},{data:d.report[1],c:"#35d18b"},{data:d.report[2],c:"#ffb240"}
+ ],d.reportLabels);
+ barChart($("#knowledgeChart"),d.knowledge,["SOP","RCA","Topo","Arch","Policy","Runbook"]);
+ barChart($("#sourceChart"),d.sources,["Azure","MCP","Logs","App","Sched","Mail"]);
+}
+window.addEventListener("resize",redrawAll);
+setTimeout(redrawAll,120);
+setTimeout(redrawAll,320);
+
+const zones=["US East","US West","Europe","Asia SG","Asia Tokyo","Global"];
+let heat='<div></div>'+Array.from({length:14},(_,i)=>'<div class="label" style="text-align:center">'+String((16+i*2)%24).padStart(2,"0")+'</div>').join('');
+zones.forEach((z,ri)=>{heat+='<div class="label">'+z+'</div>';for(let i=0;i<14;i++){const v=(ri*3+i*2+(i>8?2:0))%6;heat+='<div class="cell h'+v+'"></div>'}});
+$("#heatmap").innerHTML=heat;
+
+const dbs=[
+ ["SQL-PRD-01","Healthy","28%","312","62%",""],["SQL-PRD-02","Healthy","22%","198","58%",""],
+ ["SQL-HKG-01","Warning","68%","611","82%","warn"],["SQL-TPE-01","Healthy","31%","420","65%",""],
+ ["SQL-TPE-02","Healthy","26%","305","60%",""],["SQL-DR-01","Degraded","75%","512","88%","bad"]
+];
+$("#dbCards").innerHTML=dbs.map(d=>`<div class="dbcard"><div class="dbhead"><span><i class="dot-health ${d[5]}"></i>${d[0]}</span><span>${d[1]}</span></div><div class="dbmini"><span>CPU</span><b>${d[2]}</b><span>Connections</span><b>${d[3]}</b><span>Storage</span><b>${d[4]}</b></div></div>`).join("");
+const waits=[["PAGEIOLATCH_EX",24.6],["SOS_SCHEDULER_YIELD",16.1],["CXPACKET",13.2],["LCK_M_S",9.8],["WRITELOG",9.2],["PAGEIOLATCH_SH",6.2],["RESOURCE_SEMAPHORE",5.7],["LCK_M_X",4.6]];
+$("#waitBars").innerHTML=waits.map(w=>`<div class="waitrow"><span>${w[0]}</span><div class="waitbar"><i style="width:${w[1]*3}%"></i></div><b>${w[1]}%</b></div>`).join("");
+
+updateRangeData();
+redrawAll();
+</script>
+</body>
+</html>
